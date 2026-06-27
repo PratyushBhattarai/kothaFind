@@ -129,21 +129,16 @@ function SocialRow() {
         <span style={{ fontSize: 11, color: COLORS.txt3 }}>or continue with</span>
         <div style={{ flex: 1, height: "0.5px", background: COLORS.bdr2 }} />
       </div>
-      <div style={{ display: "flex", gap: 8 }}>
-        {["Google", "OTP"].map((label) => (
-          <button
-            key={label}
-            style={{
-              flex: 1, padding: "10px 0", background: COLORS.card,
-              border: `0.5px solid ${COLORS.bdr2}`, borderRadius: 9,
-              color: COLORS.txt2, fontSize: 13, cursor: "pointer",
-              fontFamily: "Inter, sans-serif",
-            }}
-          >
-            {label === "Google" ? "G  " : "📱  "}{label}
-          </button>
-        ))}
-      </div>
+      <button
+        style={{
+          width: "100%", padding: "10px 0", background: COLORS.card,
+          border: `0.5px solid ${COLORS.bdr2}`, borderRadius: 9,
+          color: COLORS.txt2, fontSize: 13, cursor: "pointer",
+          fontFamily: "Inter, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        }}
+      >
+        G &nbsp; Continue with Google
+      </button>
     </>
   );
 }
