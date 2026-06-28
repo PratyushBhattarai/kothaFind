@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env/
+.venv/
+
+# Environment variables
+.env
+
+# Firebase
+serviceAccountKey.json
+
+# Django
+db.sqlite3
+*.sqlite3
+
+# Logs
+*.log
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Pytest
+.pytest_cache/
+
+# Migrations cache
+**/__pycache__/
+
+# Static
+staticfiles/
+
+# Coverage
+.coverage
+htmlcov/
+
+# mypy
+.mypy_cache/

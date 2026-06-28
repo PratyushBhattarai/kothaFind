@@ -7,6 +7,26 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider } from "./firebase";
 
+// ── API helper ────────────────────────────────────────────────────────────────
+
+const BASE = "kothafind-production.up.railway.app"; // replace with your Railway URL
+
+async function registerRole(firebaseUser, role, phone, district, displayName) {
+  try {
+    const token = await firebaseUser.getIdToken();
+    const res = await fetch(`${BASE}/users/register/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ role, phone, district, display_name: displayName }),
+    });
+    return res.json();
+  } catch (err) {
+    console.error("registerRole failed:", err);
+  }
+}
+
+// ── Colors ────────────────────────────────────────────────────────────────────
+
 const C = {
   bg:"#0D0F14", surf:"#141720", card:"#1A1E2A", card2:"#1F2435",
   bdr:"rgba(255,255,255,0.07)", bdr2:"rgba(255,255,255,0.13)",
@@ -15,20 +35,20 @@ const C = {
   txt:"#E8E0D4", txt2:"#9A9590", txt3:"#5A5650", red:"#E8604C",
 };
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+// ── Error helper ──────────────────────────────────────────────────────────────
 
 function friendlyError(code) {
   if (["auth/user-not-found","auth/wrong-password","auth/invalid-credential"].includes(code))
     return "Incorrect email or password. Please try again.";
   if (code === "auth/email-already-in-use") return "An account with this email already exists. Try signing in.";
-  if (code === "auth/invalid-email") return "Please enter a valid email address.";
-  if (code === "auth/weak-password") return "Password must be at least 8 characters.";
-  if (code === "auth/too-many-requests") return "Too many attempts. Please wait and try again.";
+  if (code === "auth/invalid-email")        return "Please enter a valid email address.";
+  if (code === "auth/weak-password")        return "Password must be at least 8 characters.";
+  if (code === "auth/too-many-requests")    return "Too many attempts. Please wait and try again.";
   if (code === "auth/popup-closed-by-user") return "";
   return "Something went wrong. Please try again.";
 }
 
-// ── primitives ────────────────────────────────────────────────────────────────
+// ── Shared UI primitives ──────────────────────────────────────────────────────
 
 function Logo() {
   return (
@@ -59,8 +79,8 @@ function TextInput({type="text",placeholder,value,onChange,style={}}) {
     <input type={type} placeholder={placeholder} value={value} onChange={onChange}
       onFocus={()=>setF(true)} onBlur={()=>setF(false)}
       style={{width:"100%",background:C.card,border:`0.5px solid ${f?"rgba(255,255,255,0.3)":C.bdr2}`,
-        borderRadius:9,padding:"11px 14px",fontSize:14,color:C.txt,fontFamily:"Inter,sans-serif",
-        outline:"none",transition:"border-color 0.15s",...style}}/>
+        borderRadius:9,padding:"11px 14px",fontSize:14,color:C.txt,
+        fontFamily:"Inter,sans-serif",outline:"none",transition:"border-color 0.15s",...style}}/>
   );
 }
 
@@ -74,9 +94,9 @@ function PwInput({placeholder,value,onChange}) {
         style={{width:"100%",background:C.card,border:`0.5px solid ${f?"rgba(255,255,255,0.3)":C.bdr2}`,
           borderRadius:9,padding:"11px 42px 11px 14px",fontSize:14,color:C.txt,
           fontFamily:"Inter,sans-serif",outline:"none"}}/>
-      <button type="button" onClick={()=>setShow(!show)} aria-label={show?"Hide":"Show"}
+      <button type="button" onClick={()=>setShow(s=>!s)} aria-label={show?"Hide password":"Show password"}
         style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",
-          background:"none",border:"none",color:C.txt3,cursor:"pointer",fontSize:16}}>
+          background:"none",border:"none",color:C.txt3,cursor:"pointer",fontSize:16,lineHeight:1}}>
         {show?"🙈":"👁"}
       </button>
     </div>
@@ -86,7 +106,9 @@ function PwInput({placeholder,value,onChange}) {
 function Field({label,error,children}) {
   return (
     <div style={{marginBottom:14}}>
-      <label style={{display:"block",fontSize:12,color:C.txt2,marginBottom:6,fontWeight:500}}>{label}</label>
+      <label style={{display:"block",fontSize:12,color:C.txt2,marginBottom:6,fontWeight:500}}>
+        {label}
+      </label>
       {children}
       {error&&<p style={{fontSize:11,color:C.red,marginTop:4}}>{error}</p>}
     </div>
@@ -94,8 +116,8 @@ function Field({label,error,children}) {
 }
 
 function ErrorBanner({msg}) {
-  if(!msg)return null;
-  return(
+  if(!msg) return null;
+  return (
     <div style={{background:"rgba(232,96,76,0.1)",border:"0.5px solid rgba(232,96,76,0.3)",
       borderRadius:9,padding:"10px 14px",marginBottom:14,fontSize:13,color:C.red}}>
       ⚠ {msg}
@@ -109,7 +131,7 @@ function GoogleBtn({onClick,loading}) {
       style={{width:"100%",padding:"11px 0",background:C.card,border:`0.5px solid ${C.bdr2}`,
         borderRadius:9,color:C.txt2,fontSize:13,cursor:loading?"not-allowed":"pointer",
         fontFamily:"Inter,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",
-        gap:10,opacity:loading?0.6:1}}>
+        gap:10,opacity:loading?0.6:1,transition:"border-color 0.15s"}}>
       <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
         <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
         <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
@@ -131,7 +153,7 @@ function Divider({label="or"}) {
   );
 }
 
-function SubmitBtn({accent,role,loading,children,onClick}) {
+function SubmitBtn({accent,role,loading,onClick,children}) {
   return (
     <button type="button" onClick={onClick} disabled={loading}
       style={{width:"100%",padding:12,border:"none",borderRadius:10,background:accent,
@@ -147,7 +169,8 @@ function SubmitBtn({accent,role,loading,children,onClick}) {
 function RoleCard({roleKey,icon,title,desc,perks,accent,accentDim,accentBdr,onSelect}) {
   const [h,setH]=useState(false);
   return (
-    <div onClick={()=>onSelect(roleKey)} onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)}
+    <div onClick={()=>onSelect(roleKey)}
+      onMouseEnter={()=>setH(true)} onMouseLeave={()=>setH(false)}
       style={{background:h?accentDim:C.card,border:`0.5px solid ${h?accentBdr:C.bdr2}`,
         borderRadius:14,padding:"24px 20px",cursor:"pointer",textAlign:"center",
         transition:"border-color 0.15s,background 0.15s"}}>
@@ -155,12 +178,14 @@ function RoleCard({roleKey,icon,title,desc,perks,accent,accentDim,accentBdr,onSe
         alignItems:"center",justifyContent:"center",margin:"0 auto 14px",fontSize:22}}>
         {icon}
       </div>
-      <h3 style={{fontFamily:"'Sora',sans-serif",fontSize:16,fontWeight:600,color:accent,marginBottom:6}}>{title}</h3>
+      <h3 style={{fontFamily:"'Sora',sans-serif",fontSize:16,fontWeight:600,color:accent,marginBottom:6}}>
+        {title}
+      </h3>
       <p style={{fontSize:12,color:C.txt2,lineHeight:1.5,marginBottom:12}}>{desc}</p>
       <div style={{display:"flex",flexDirection:"column",gap:4}}>
         {perks.map(p=>(
           <div key={p} style={{fontSize:11,color:C.txt2,display:"flex",alignItems:"center",gap:5}}>
-            <span style={{color:accent}}>✓</span>{p}
+            <span style={{color:accent,fontSize:13}}>✓</span>{p}
           </div>
         ))}
       </div>
@@ -172,11 +197,16 @@ function RoleScreen({onSelect}) {
   return (
     <div style={{maxWidth:480,margin:"0 auto",padding:"32px 24px"}}>
       <div style={{textAlign:"center",marginBottom:8}}><Mandala size={38}/></div>
-      <h2 style={{fontFamily:"'Sora',sans-serif",fontSize:22,fontWeight:700,textAlign:"center",marginBottom:5,color:C.txt}}>
+      <h2 style={{fontFamily:"'Sora',sans-serif",fontSize:22,fontWeight:700,
+        textAlign:"center",marginBottom:5,color:C.txt}}>
         Welcome to KothaFind
       </h2>
-      <p style={{fontSize:13,color:C.txt2,textAlign:"center",marginBottom:2}}>Kathmandu Valley's room marketplace</p>
-      <p style={{fontSize:13,color:C.txt3,textAlign:"center",marginBottom:24}}>Who are you?</p>
+      <p style={{fontSize:13,color:C.txt2,textAlign:"center",marginBottom:2}}>
+        Kathmandu Valley's room marketplace
+      </p>
+      <p style={{fontSize:13,color:C.txt3,textAlign:"center",marginBottom:24}}>
+        Who are you?
+      </p>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
         <RoleCard roleKey="rentee" icon="🔍" title="Rentee"
           desc="Looking for a room or flat in the valley"
@@ -189,7 +219,9 @@ function RoleScreen({onSelect}) {
       </div>
       <p style={{textAlign:"center",marginTop:16,fontSize:12,color:C.txt3}}>
         Already have an account?{" "}
-        <span onClick={()=>onSelect("rentee")} style={{color:C.txt2,cursor:"pointer"}}>Sign in</span>
+        <span onClick={()=>onSelect("rentee")} style={{color:C.txt2,cursor:"pointer"}}>
+          Sign in
+        </span>
       </p>
     </div>
   );
@@ -198,46 +230,55 @@ function RoleScreen({onSelect}) {
 // ── Login form ────────────────────────────────────────────────────────────────
 
 function LoginForm({role,accent,onSuccess}) {
-  const [email,setEmail]=useState("");
-  const [pw,setPw]=useState("");
-  const [err,setErr]=useState("");
-  const [loading,setLoading]=useState(false);
-  const [gLoad,setGLoad]=useState(false);
+  const [email,setEmail]   = useState("");
+  const [pw,setPw]         = useState("");
+  const [err,setErr]       = useState("");
+  const [loading,setLoad]  = useState(false);
+  const [gLoad,setGLoad]   = useState(false);
 
-  const handleEmail=async()=>{
+  const handleEmail = async () => {
     setErr("");
-    if(!email||!pw){setErr("Please fill in all fields.");return;}
-    setLoading(true);
-    try{
-      const c=await signInWithEmailAndPassword(auth,email,pw);
-      onSuccess({user:c.user,method:"email",role,isNew:false});
-    }catch(e){setErr(friendlyError(e.code));}
-    finally{setLoading(false);}
+    if(!email||!pw){ setErr("Please fill in all fields."); return; }
+    setLoad(true);
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, pw);
+      onSuccess({ user:cred.user, method:"email", role, isNew:false });
+    } catch(e) {
+      setErr(friendlyError(e.code));
+    } finally { setLoad(false); }
   };
 
-  const handleGoogle=async()=>{
-    setErr("");setGLoad(true);
-    try{
-      const c=await signInWithPopup(auth,googleProvider);
-      onSuccess({user:c.user,method:"google",role,isNew:false});
-    }catch(e){const m=friendlyError(e.code);if(m)setErr(m);}
-    finally{setGLoad(false);}
+  const handleGoogle = async () => {
+    setErr(""); setGLoad(true);
+    try {
+      const cred = await signInWithPopup(auth, googleProvider);
+      onSuccess({ user:cred.user, method:"google", role, isNew:false });
+    } catch(e) {
+      const m = friendlyError(e.code);
+      if(m) setErr(m);
+    } finally { setGLoad(false); }
   };
 
-  return(
+  return (
     <div>
       <GoogleBtn onClick={handleGoogle} loading={gLoad}/>
       <Divider label="or sign in with email"/>
       <ErrorBanner msg={err}/>
+
       <Field label="Email address">
-        <TextInput type="email" placeholder="aarav@email.com" value={email} onChange={e=>setEmail(e.target.value)}/>
+        <TextInput type="email" placeholder="aarav@email.com"
+          value={email} onChange={e=>setEmail(e.target.value)}/>
       </Field>
+
       <Field label="Password">
-        <PwInput placeholder="Enter your password" value={pw} onChange={e=>setPw(e.target.value)}/>
+        <PwInput placeholder="Enter your password"
+          value={pw} onChange={e=>setPw(e.target.value)}/>
       </Field>
+
       <div style={{fontSize:12,color:C.txt2,textAlign:"right",marginBottom:16,cursor:"pointer"}}>
         Forgot password?
       </div>
+
       <SubmitBtn accent={accent} role={role} loading={loading} onClick={handleEmail}>
         {loading?"Signing in…":"Sign in with email"}
       </SubmitBtn>
@@ -245,61 +286,96 @@ function LoginForm({role,accent,onSuccess}) {
   );
 }
 
-// ── Sign-up form ──────────────────────────────────────────────────────────────
+// ── Sign-up form (with Django registerRole integration) ───────────────────────
 
 function SignupForm({role,accent,onSuccess}) {
-  const [form,setForm]=useState({firstName:"",lastName:"",phone:"",email:"",district:"",password:"",confirm:""});
-  const [errs,setErrs]=useState({});
-  const [gErr,setGErr]=useState("");
-  const [loading,setLoading]=useState(false);
-  const [gLoad,setGLoad]=useState(false);
+  const [form,setForm] = useState({
+    firstName:"", lastName:"", phone:"", email:"",
+    district:"", password:"", confirm:""
+  });
+  const [errs,setErrs]   = useState({});
+  const [gErr,setGErr]   = useState("");
+  const [loading,setLoad]= useState(false);
+  const [gLoad,setGLoad] = useState(false);
 
-  const set=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
+  const set = k => e => setForm(f=>({...f,[k]:e.target.value}));
 
-  const validate=()=>{
+  const validate = () => {
     const e={};
-    if(!form.firstName.trim())e.firstName="Required";
-    if(!form.lastName.trim())e.lastName="Required";
-    if(!/\S+@\S+\.\S+/.test(form.email))e.email="Valid email required";
-    if(form.password.length<8)e.password="Min. 8 characters";
-    if(form.password!==form.confirm)e.confirm="Passwords don't match";
-    if(role==="renter"&&!form.district)e.district="Please select a district";
+    if(!form.firstName.trim())                  e.firstName="Required";
+    if(!form.lastName.trim())                   e.lastName="Required";
+    if(!/\S+@\S+\.\S+/.test(form.email))        e.email="Valid email required";
+    if(form.password.length<8)                  e.password="Min. 8 characters";
+    if(form.password!==form.confirm)            e.confirm="Passwords don't match";
+    if(role==="renter"&&!form.district)         e.district="Please select a district";
     return e;
   };
 
-  const handleEmail=async()=>{
+  // ── Email signup + Django sync ──
+  const handleEmail = async () => {
     setGErr("");
-    const e=validate();
-    if(Object.keys(e).length){setErrs(e);return;}
-    setErrs({});setLoading(true);
-    try{
-      const c=await createUserWithEmailAndPassword(auth,form.email,form.password);
-      await updateProfile(c.user,{displayName:`${form.firstName} ${form.lastName}`});
-      onSuccess({user:c.user,method:"email",role,isNew:true});
-    }catch(err){setGErr(friendlyError(err.code));}
-    finally{setLoading(false);}
+    const e = validate();
+    if(Object.keys(e).length){ setErrs(e); return; }
+    setErrs({}); setLoad(true);
+    try {
+      // 1. create Firebase account
+      const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
+
+      // 2. set display name in Firebase
+      await updateProfile(cred.user, {
+        displayName: `${form.firstName} ${form.lastName}`
+      });
+
+      // 3. register role + profile in Django
+      await registerRole(
+        cred.user,
+        role,
+        form.phone,
+        form.district,
+        `${form.firstName} ${form.lastName}`
+      );
+
+      onSuccess({ user:cred.user, method:"email", role, isNew:true });
+    } catch(err) {
+      setGErr(friendlyError(err.code));
+    } finally { setLoad(false); }
   };
 
-  const handleGoogle=async()=>{
-    setGErr("");setGLoad(true);
-    try{
-      const c=await signInWithPopup(auth,googleProvider);
-      onSuccess({user:c.user,method:"google",role,isNew:true});
-    }catch(e){const m=friendlyError(e.code);if(m)setGErr(m);}
-    finally{setGLoad(false);}
+  // ── Google signup + Django sync ──
+  const handleGoogle = async () => {
+    setGErr(""); setGLoad(true);
+    try {
+      // 1. sign in with Google popup
+      const cred = await signInWithPopup(auth, googleProvider);
+
+      // 2. register role in Django (phone/district empty — user fills later in profile)
+      await registerRole(
+        cred.user,
+        role,
+        "",   // phone — not available from Google
+        "",   // district — not available from Google
+        cred.user.displayName
+      );
+
+      onSuccess({ user:cred.user, method:"google", role, isNew:true });
+    } catch(e) {
+      const m = friendlyError(e.code);
+      if(m) setGErr(m);
+    } finally { setGLoad(false); }
   };
 
-  return(
+  return (
     <div>
       <GoogleBtn onClick={handleGoogle} loading={gLoad}/>
       <Divider label="or create account with email"/>
 
       {role==="renter"&&(
         <div style={{background:C.card,border:`0.5px solid ${C.bdr2}`,borderRadius:10,
-          padding:"12px 14px",marginBottom:18,display:"flex",gap:10}}>
-          <span style={{fontSize:15,color:C.txt2,flexShrink:0}}>ℹ</span>
+          padding:"12px 14px",marginBottom:18,display:"flex",gap:10,alignItems:"flex-start"}}>
+          <span style={{fontSize:15,color:C.txt2,flexShrink:0,marginTop:1}}>ℹ</span>
           <p style={{fontSize:12,color:C.txt2,lineHeight:1.55}}>
-            Renter accounts are verified by KothaFind. Upload citizenship or property documents after sign-up.
+            Renter accounts are verified by KothaFind. Upload citizenship or property
+            documents after sign-up.
           </p>
         </div>
       )}
@@ -318,19 +394,22 @@ function SignupForm({role,accent,onSuccess}) {
       <Field label="Phone number">
         <div style={{display:"flex",gap:8}}>
           <TextInput value="+977" style={{width:72,flexShrink:0}}/>
-          <TextInput type="tel" placeholder="98XXXXXXXX" value={form.phone} onChange={set("phone")}/>
+          <TextInput type="tel" placeholder="98XXXXXXXX"
+            value={form.phone} onChange={set("phone")}/>
         </div>
       </Field>
 
       <Field label="Email address" error={errs.email}>
-        <TextInput type="email" placeholder="aarav@email.com" value={form.email} onChange={set("email")}/>
+        <TextInput type="email" placeholder="aarav@email.com"
+          value={form.email} onChange={set("email")}/>
       </Field>
 
       {role==="renter"&&(
         <Field label="District" error={errs.district}>
           <select value={form.district} onChange={set("district")}
-            style={{width:"100%",background:C.card,border:`0.5px solid ${C.bdr2}`,borderRadius:9,
-              padding:"11px 14px",fontSize:14,color:C.txt2,fontFamily:"Inter,sans-serif",outline:"none"}}>
+            style={{width:"100%",background:C.card,border:`0.5px solid ${C.bdr2}`,
+              borderRadius:9,padding:"11px 14px",fontSize:14,color:C.txt2,
+              fontFamily:"Inter,sans-serif",outline:"none"}}>
             <option value="" disabled>Select district</option>
             <option>Kathmandu</option>
             <option>Lalitpur</option>
@@ -340,11 +419,13 @@ function SignupForm({role,accent,onSuccess}) {
       )}
 
       <Field label="Password" error={errs.password}>
-        <PwInput placeholder="Min. 8 characters" value={form.password} onChange={set("password")}/>
+        <PwInput placeholder="Min. 8 characters"
+          value={form.password} onChange={set("password")}/>
       </Field>
 
       <Field label="Confirm password" error={errs.confirm}>
-        <PwInput placeholder="Re-enter password" value={form.confirm} onChange={set("confirm")}/>
+        <PwInput placeholder="Re-enter password"
+          value={form.confirm} onChange={set("confirm")}/>
       </Field>
 
       <p style={{fontSize:11,color:C.txt3,marginBottom:14,lineHeight:1.5}}>
@@ -360,43 +441,49 @@ function SignupForm({role,accent,onSuccess}) {
   );
 }
 
-// ── Auth screen ───────────────────────────────────────────────────────────────
+// ── Auth screen (tabs: login / signup) ────────────────────────────────────────
 
 function AuthScreen({role,onBack,onSuccess}) {
-  const [tab,setTab]=useState("login");
-  const isR=role==="rentee";
-  const accent=isR?C.gold:C.teal;
-  const accentDim=isR?C.goldDim:C.tealDim;
-  const accentBdr=isR?C.goldBdr:C.tealBdr;
+  const [tab,setTab] = useState("login");
+  const isR    = role==="rentee";
+  const accent = isR?C.gold:C.teal;
+  const accentDim = isR?C.goldDim:C.tealDim;
+  const accentBdr = isR?C.goldBdr:C.tealBdr;
 
-  return(
+  return (
     <div style={{maxWidth:480,margin:"0 auto",padding:"32px 24px"}}>
+      {/* role tag */}
       <div style={{display:"inline-block",fontSize:11,fontWeight:500,letterSpacing:"0.07em",
         textTransform:"uppercase",padding:"4px 10px",borderRadius:5,marginBottom:14,
         background:accentDim,color:accent,border:`0.5px solid ${accentBdr}`}}>
         {isR?"Rentee — room seeker":"Renter — room owner"}
       </div>
+
       <h2 style={{fontFamily:"'Sora',sans-serif",fontSize:22,fontWeight:700,marginBottom:5,color:C.txt}}>
         {isR?"Find your kotha":"Manage your property"}
       </h2>
       <p style={{fontSize:13,color:C.txt2,marginBottom:24}}>
-        {isR?"Sign in to browse rooms across Kathmandu Valley.":"Sign in to list rooms and manage inquiries."}
+        {isR
+          ?"Sign in to browse rooms across Kathmandu Valley."
+          :"Sign in to list rooms and manage inquiries."}
       </p>
 
+      {/* tab switcher */}
       <div style={{display:"flex",background:C.card,border:`0.5px solid ${C.bdr2}`,
         borderRadius:10,padding:4,marginBottom:24,gap:4}}>
         {["login","signup"].map(t=>(
           <button key={t} type="button" onClick={()=>setTab(t)}
             style={{flex:1,padding:8,border:tab===t?`0.5px solid ${C.bdr2}`:"none",
               background:tab===t?C.card2:"none",borderRadius:7,fontSize:13,fontWeight:500,
-              cursor:"pointer",color:tab===t?C.txt:C.txt2,fontFamily:"Inter,sans-serif",transition:"all 0.15s"}}>
+              cursor:"pointer",color:tab===t?C.txt:C.txt2,
+              fontFamily:"Inter,sans-serif",transition:"all 0.15s"}}>
             {t==="login"?"Sign in":"Create account"}
           </button>
         ))}
       </div>
 
       {tab==="login"
-        ?<LoginForm role={role} accent={accent} onSuccess={onSuccess}/>
+        ?<LoginForm  role={role} accent={accent} onSuccess={onSuccess}/>
         :<SignupForm role={role} accent={accent} onSuccess={onSuccess}/>}
 
       <p style={{textAlign:"center",marginTop:20,fontSize:12,color:C.txt3}}>
@@ -410,15 +497,16 @@ function AuthScreen({role,onBack,onSuccess}) {
 // ── Success screen ────────────────────────────────────────────────────────────
 
 function SuccessScreen({role,authInfo,onReset}) {
-  const isR=role==="rentee";
-  const accent=isR?C.gold:C.teal;
-  const accentDim=isR?C.goldDim:C.tealDim;
-  const first=(authInfo?.user?.displayName||"there").split(" ")[0];
+  const isR      = role==="rentee";
+  const accent   = isR?C.gold:C.teal;
+  const accentDim= isR?C.goldDim:C.tealDim;
+  const first    = (authInfo?.user?.displayName||"there").split(" ")[0];
 
-  return(
+  return (
     <div style={{maxWidth:480,margin:"0 auto",padding:"60px 24px",textAlign:"center"}}>
-      <div style={{width:60,height:60,borderRadius:"50%",background:accentDim,display:"flex",
-        alignItems:"center",justifyContent:"center",margin:"0 auto 16px",fontSize:26,color:accent}}>
+      <div style={{width:60,height:60,borderRadius:"50%",background:accentDim,
+        display:"flex",alignItems:"center",justifyContent:"center",
+        margin:"0 auto 16px",fontSize:26,color:accent}}>
         ✓
       </div>
       <h2 style={{fontFamily:"'Sora',sans-serif",fontSize:20,fontWeight:700,marginBottom:6,color:C.txt}}>
@@ -426,6 +514,9 @@ function SuccessScreen({role,authInfo,onReset}) {
       </h2>
       <p style={{fontSize:13,color:C.txt2,marginBottom:6}}>
         Signed in as <strong style={{color:C.txt}}>{authInfo?.user?.email}</strong>
+      </p>
+      <p style={{fontSize:13,color:C.txt2,marginBottom:10,lineHeight:1.6}}>
+        Role: <strong style={{color:accent,textTransform:"capitalize"}}>{role}</strong>
       </p>
       <p style={{fontSize:13,color:C.txt2,marginBottom:28,lineHeight:1.6}}>
         {isR
@@ -444,43 +535,49 @@ function SuccessScreen({role,authInfo,onReset}) {
   );
 }
 
-// ── Root ──────────────────────────────────────────────────────────────────────
+// ── Root component ────────────────────────────────────────────────────────────
 
 export default function KothaFindAuth() {
-  const [screen,setScreen]=useState("role");
-  const [role,setRole]=useState(null);
-  const [authInfo,setAuthInfo]=useState(null);
+  const [screen,  setScreen]  = useState("role"); // "role" | "auth" | "success"
+  const [role,    setRole]    = useState(null);
+  const [authInfo,setAuthInfo]= useState(null);
 
-  return(
+  const goToRole = () => { setScreen("role"); setRole(null); setAuthInfo(null); };
+
+  return (
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:"Inter,sans-serif"}}>
-      <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet"/>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500&display=swap"
+        rel="stylesheet"/>
+
+      {/* Navbar */}
       <nav style={{display:"flex",alignItems:"center",justifyContent:"space-between",
         padding:"14px 24px",borderBottom:`0.5px solid ${C.bdr}`,background:C.surf,
         position:"sticky",top:0,zIndex:10}}>
         <Logo/>
         {screen!=="role"&&(
           <button type="button"
-            onClick={()=>{
-              if(screen==="success"){setScreen("role");setRole(null);setAuthInfo(null);}
-              else setScreen("role");
-            }}
+            onClick={screen==="success"?goToRole:()=>setScreen("role")}
             style={{background:"none",border:`0.5px solid ${C.bdr2}`,borderRadius:8,
-              color:C.txt2,fontSize:13,padding:"6px 14px",cursor:"pointer",fontFamily:"Inter,sans-serif"}}>
+              color:C.txt2,fontSize:13,padding:"6px 14px",cursor:"pointer",
+              fontFamily:"Inter,sans-serif",display:"flex",alignItems:"center",gap:6}}>
             ← {screen==="success"?"Start over":"Back"}
           </button>
         )}
       </nav>
 
+      {/* Screens */}
       {screen==="role"&&(
-        <RoleScreen onSelect={r=>{setRole(r);setScreen("auth");}}/>
+        <RoleScreen onSelect={r=>{ setRole(r); setScreen("auth"); }}/>
       )}
       {screen==="auth"&&(
-        <AuthScreen role={role} onBack={()=>setScreen("role")}
-          onSuccess={info=>{setAuthInfo(info);setScreen("success");}}/>
+        <AuthScreen
+          role={role}
+          onBack={()=>setScreen("role")}
+          onSuccess={info=>{ setAuthInfo(info); setScreen("success"); }}/>
       )}
       {screen==="success"&&(
-        <SuccessScreen role={role} authInfo={authInfo}
-          onReset={()=>{setScreen("role");setRole(null);setAuthInfo(null);}}/>
+        <SuccessScreen role={role} authInfo={authInfo} onReset={goToRole}/>
       )}
     </div>
   );
