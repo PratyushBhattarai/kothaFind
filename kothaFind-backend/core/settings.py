@@ -9,7 +9,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 DEBUG = os.getenv("DEBUG", "False") == "True"
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = [
+    "127.0.0.1",
+    "localhost",
+    "kothafind-production.up.railway.app",
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -65,7 +69,7 @@ DATABASES = {
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
-    "https://your-app.vercel.app",   # replace with your Vercel URL
+    "https://kotha-find.vercel.app",   # replace with your Vercel URL
 ]
 
 REST_FRAMEWORK = {
@@ -80,3 +84,6 @@ REST_FRAMEWORK = {
 STATIC_URL = "/static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = "users.User"
+
+MEDIA_URL  = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"

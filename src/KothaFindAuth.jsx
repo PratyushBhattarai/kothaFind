@@ -9,7 +9,7 @@ import { auth, googleProvider } from "./firebase";
 
 // ── API helper ────────────────────────────────────────────────────────────────
 
-const BASE = "kothafind-production.up.railway.app"; // replace with your Railway URL
+const BASE = "https://your-django-backend.com/api"; // replace with your Railway URL
 
 async function registerRole(firebaseUser, role, phone, district, displayName) {
   try {
@@ -537,12 +537,20 @@ function SuccessScreen({role,authInfo,onReset}) {
 
 // ── Root component ────────────────────────────────────────────────────────────
 
-export default function KothaFindAuth() {
+export default function KothaFindAuth({ onSuccess: onSuccessExternal }) {
   const [screen,  setScreen]  = useState("role"); // "role" | "auth" | "success"
   const [role,    setRole]    = useState(null);
   const [authInfo,setAuthInfo]= useState(null);
 
   const goToRole = () => { setScreen("role"); setRole(null); setAuthInfo(null); };
+
+  // called by LoginForm / SignupForm with { user, role, method, isNew }
+  const handleAuthSuccess = (info) => {
+    setAuthInfo(info);
+    setScreen("success");
+    // notify App.jsx so it can switch to RenterApp / RenteeApp
+    if (onSuccessExternal) onSuccessExternal(info);
+  };
 
   return (
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:"Inter,sans-serif"}}>
@@ -574,7 +582,7 @@ export default function KothaFindAuth() {
         <AuthScreen
           role={role}
           onBack={()=>setScreen("role")}
-          onSuccess={info=>{ setAuthInfo(info); setScreen("success"); }}/>
+          onSuccess={handleAuthSuccess}/>
       )}
       {screen==="success"&&(
         <SuccessScreen role={role} authInfo={authInfo} onReset={goToRole}/>
