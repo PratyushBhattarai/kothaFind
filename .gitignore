@@ -16,3 +16,7 @@ kothaFind-backend/serviceAccountKey.json
 
 # Logs
 *.log
+
+# Environment variables
+.env
+*.env
