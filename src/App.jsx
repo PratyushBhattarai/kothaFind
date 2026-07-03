@@ -4,7 +4,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 import KothaFindAuth from "./KothaFindAuth";
 import RenterApp from "./RenterApp";
-import RenteeApp from "./RenteeApp";
+//import RenteeApp from "./RenteeApp";
 
 const DJANGO_BASE = import.meta.env.VITE_DJANGO_BASE || "http://127.0.0.1:8000/api";
 
@@ -101,9 +101,9 @@ export default function App() {
   }
 
   // signed in as rentee
-  if (role === "rentee") {
-    return <RenteeApp />;
-  }
+  //if (role === "rentee") {
+    //return <RenteeApp />;
+  //}
 
   // fallback
   return <KothaFindAuth onSuccess={handleAuthSuccess} />;
