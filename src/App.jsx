@@ -4,150 +4,103 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 import KothaFindAuth from "./KothaFindAuth";
 import RenterApp from "./RenterApp";
+import RenteeApp from "./RenteeApp";
 
-const DJANGO_BASE = "https://kothafind-production.up.railway.app"; // change to Railway URL in production
+const DJANGO_BASE = import.meta.env.VITE_DJANGO_BASE || "http://127.0.0.1:8000/api";
 
-async function fetchProfile(firebaseUser) {
+async function fetchRole(firebaseUser) {
   const token = await firebaseUser.getIdToken();
   const res = await fetch(`${DJANGO_BASE}/users/me/`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error("profile fetch failed");
-  return res.json();
+  const data = await res.json();
+  return data.role; // "renter" or "rentee"
 }
 
-// ── Loading screen ────────────────────────────────────────────────────────────
 function LoadingScreen({ message = "Loading…" }) {
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#0D0F14",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 16,
-    }}>
-      {/* spinner */}
-      <div style={{
-        width: 36,
-        height: 36,
-        borderRadius: "50%",
-        border: "2px solid rgba(42,191,191,0.15)",
-        borderTopColor: "#2ABFBF",
-        animation: "spin 0.8s linear infinite",
-      }}/>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      <p style={{ color: "#9A9590", fontSize: 13, fontFamily: "Inter, sans-serif" }}>
+    <div style={{ minHeight:"100vh", background:"#0D0F14", display:"flex",
+      flexDirection:"column", alignItems:"center", justifyContent:"center", gap:14 }}>
+      <div style={{ width:32, height:32, borderRadius:"50%",
+        border:"2px solid rgba(245,166,35,0.15)", borderTopColor:"#F5A623",
+        animation:"spin 0.8s linear infinite" }}/>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <p style={{ color:"#9A9590", fontSize:13, fontFamily:"Inter,sans-serif" }}>
         {message}
       </p>
     </div>
   );
 }
 
-// ── Rentee placeholder ────────────────────────────────────────────────────────
-function RenteeApp() {
-  return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#0D0F14",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      flexDirection: "column",
-      gap: 12,
-      fontFamily: "Inter, sans-serif",
-    }}>
-      <div style={{ fontSize: 40 }}>🔍</div>
-      <h2 style={{
-        fontFamily: "'Sora', sans-serif",
-        color: "#E8E0D4",
-        fontSize: 20,
-        fontWeight: 700,
-        margin: 0,
-      }}>
-        Rentee dashboard
-      </h2>
-      <p style={{ color: "#9A9590", fontSize: 13 }}>Coming soon — browse rooms across Kathmandu Valley</p>
-    </div>
-  );
-}
-
-// ── Root App ──────────────────────────────────────────────────────────────────
 export default function App() {
-  // undefined  = Firebase still initialising (show spinner)
-  // null       = no user signed in (show auth)
-  // object     = signed-in Firebase user
+  // undefined  = Firebase still initialising
+  // null       = signed out
+  // object     = signed in
   const [firebaseUser, setFirebaseUser] = useState(undefined);
+  const [role,         setRole]         = useState(null);
+  const [roleLoading,  setRoleLoading]  = useState(false);
 
-  // role comes from Django profile ("renter" | "rentee" | null)
-  const [role,    setRole]    = useState(null);
-  const [loading, setLoading] = useState(true);  // fetching Django profile
-
-  // ── Listen to Firebase auth state ─────────────────────────────────────────
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      setFirebaseUser(user);
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      setFirebaseUser(u || null);
 
-      if (!user) {
-        // signed out
+      if (!u) {
         setRole(null);
-        setLoading(false);
         return;
       }
 
-      // signed in — fetch role from Django
-      setLoading(true);
+      // user is signed in — fetch their role from Django
+      setRoleLoading(true);
       try {
-        const profile = await fetchProfile(user);
-        setRole(profile.role || null);
-      } catch {
-        // Django might not have a profile yet (first sign-in)
-        // role will be set by KothaFindAuth onSuccess below
+        const r = await fetchRole(u);
+        console.log("Role from Django:", r); // debug — remove later
+        setRole(r || null);
+      } catch (e) {
+        console.error("Could not fetch role:", e);
         setRole(null);
       } finally {
-        setLoading(false);
+        setRoleLoading(false);
       }
     });
 
-    return unsub; // cleanup on unmount
+    return unsub;
   }, []);
 
-  // ── Called by KothaFindAuth after successful login / signup ───────────────
+  // called by KothaFindAuth after login/signup
   const handleAuthSuccess = (info) => {
-    // info = { user, role, method, isNew }
     setFirebaseUser(info.user);
     setRole(info.role);
   };
 
-  // ── Render logic ──────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
-  // 1. Firebase still initialising
+  // Firebase still starting up
   if (firebaseUser === undefined) {
     return <LoadingScreen message="Starting up…" />;
   }
 
-  // 2. Firebase ready but fetching Django profile
-  if (firebaseUser && loading) {
+  // Firebase ready but fetching role from Django
+  if (firebaseUser && roleLoading) {
     return <LoadingScreen message="Loading your profile…" />;
   }
 
-  // 3. Not signed in → show auth
+  // not signed in
   if (!firebaseUser) {
     return <KothaFindAuth onSuccess={handleAuthSuccess} />;
   }
 
-  // 4. Signed in but role unknown (edge case: Django profile missing)
+  // signed in but role still unknown (Django profile missing)
   if (!role) {
     return <KothaFindAuth onSuccess={handleAuthSuccess} />;
   }
 
-  // 5. Signed in as renter
+  // signed in as renter
   if (role === "renter") {
     return <RenterApp />;
   }
 
-  // 6. Signed in as rentee
+  // signed in as rentee
   if (role === "rentee") {
     return <RenteeApp />;
   }
