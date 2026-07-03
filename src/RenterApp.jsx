@@ -1,55 +1,47 @@
-// src/App.jsx
+// ─────────────────────────────────────────────────────────────────────────────
+// RenterApp.jsx  — root for the renter side
+// Decides: show onboarding OR dashboard based on whether terms are accepted
+// Import this inside App.jsx when role === "renter"
+// ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect } from "react";
 import { auth } from "./firebase";
-import { onAuthStateChanged } from "firebase/auth";
-import KothaFindAuth from "./KothaFindAuth";
-import RenterApp from "./RenterApp";
+import RenterOnboarding from "./RenterOnboarding";
+import RenterDashboard  from "./RenterDashboard";
 
-export default function App() {
-  const [user, setUser]   = useState(undefined); // undefined = still checking
-  const [role, setRole]   = useState(null);
+const BASE = "https://your-django-backend.com/api";
 
-  // listen for Firebase auth state changes
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u || null);
-      if (!u) setRole(null);
-    });
-    return unsub;
+async function getProfile() {
+  const token = await auth.currentUser.getIdToken();
+  const res = await fetch(`${BASE}/users/me/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.json();
+}
+
+export default function RenterApp() {
+  const [state, setState] = useState("loading"); // "loading"|"onboarding"|"dashboard"
+
+  useEffect(()=>{
+    getProfile()
+      .then(profile => {
+        // if terms accepted → go to dashboard; else → onboarding
+        setState(profile.is_verified ? "dashboard" : "onboarding");
+      })
+      .catch(() => setState("onboarding"));
   }, []);
 
-  // still checking Firebase auth
-  if (user === undefined) {
+  if (state === "loading") {
     return (
-      <div style={{ minHeight:"100vh", background:"#0D0F14", display:"flex",
-        alignItems:"center", justifyContent:"center", color:"#9A9590", fontSize:14 }}>
+      <div style={{minHeight:"100vh",background:"#0D0F14",display:"flex",
+        alignItems:"center",justifyContent:"center",color:"#9A9590",fontSize:14}}>
         Loading…
       </div>
     );
   }
 
-  // not signed in → show auth screen
-  if (!user) {
-    return (
-      <KothaFindAuth
-        onSuccess={(info) => {
-          setUser(info.user);
-          setRole(info.role);
-        }}
-      />
-    );
+  if (state === "onboarding") {
+    return <RenterOnboarding onComplete={() => setState("dashboard")} />;
   }
 
-  // signed in as renter → renter flow
-  if (role === "renter") {
-    return <RenterApp />;
-  }
-
-  // signed in as rentee → placeholder for now
-  return (
-    <div style={{ minHeight:"100vh", background:"#0D0F14", display:"flex",
-      alignItems:"center", justifyContent:"center", color:"#E8E0D4", fontSize:16 }}>
-      Rentee dashboard — coming soon
-    </div>
-  );
+  return <RenterDashboard onAddRoom={() => {/* navigate to add room */}} />;
 }
