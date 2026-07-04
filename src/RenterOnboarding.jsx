@@ -5,9 +5,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useRef, useEffect } from "react";
 import { auth } from "./firebase";
+import * as maptilersdk from "@maptiler/sdk";
 
 const BASE = import.meta.env.VITE_DJANGO_BASE;L
-const MAPS_KEY = import.meta.env.VITE_MAPS_KEY;
+const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY;
 
 async function apiPost(path, body) {
   const token = await auth.currentUser.getIdToken();
