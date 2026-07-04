@@ -68,9 +68,24 @@ DATABASES = {
 }
 
 CORS_ALLOWED_ORIGINS = [
+    "https://kotha-find.vercel.app",
     "http://localhost:5173",
-    "https://kotha-find.vercel.app",   # replace with your Vercel URL
+    "http://127.0.0.1:5173",
 ]
+
+CORS_ALLOW_HEADERS = [
+    "authorization",
+    "content-type",
+    "accept",
+    "origin",
+    "x-requested-with",
+]
+
+CORS_ALLOW_METHODS = [
+    "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS",
+]
+
+CORS_PREFLIGHT_MAX_AGE = 86400
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
