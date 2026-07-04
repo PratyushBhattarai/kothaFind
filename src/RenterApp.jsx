@@ -8,7 +8,7 @@ import { auth } from "./firebase";
 import RenterOnboarding from "./RenterOnboarding";
 import RenterDashboard  from "./RenterDashboard";
 
-const BASE = "https://your-django-backend.com/api";
+const BASE = import.meta.env.VITE_DJANGO_USERS || "http://127.0.0.1:8000/api/users";
 
 async function getProfile() {
   const token = await auth.currentUser.getIdToken();

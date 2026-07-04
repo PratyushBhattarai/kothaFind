@@ -5,6 +5,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useRef, useEffect } from "react";
 import { auth } from "./firebase";
+import * as Leaflet from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 const BASE = import.meta.env.VITE_DJANGO_BASE
 const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY
@@ -178,92 +180,64 @@ function StepLocation({onNext}) {
   const [err,      setErr]      = useState("");
 
   // ── Init MapTiler + Leaflet ─────────────────────────────────────────────────
-  useEffect(()=>{
-    if(mapObj.current) return;
+  useEffect(() => {
+    if (mapObj.current) return;
 
-    // inject Leaflet CSS once
-    if(!document.getElementById("leaflet-css")){
-      const link=document.createElement("link");
-      link.id="leaflet-css";
-      link.rel="stylesheet";
-      link.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-      document.head.appendChild(link);
-    }
-
-    import("leaflet").then((L)=>{
-      const Lf = L.default||L;
-
-      const map = Lf.map(mapRef.current,{
-        center:[27.7172,85.3240], zoom:13,
-      });
-
-      // MapTiler dark tiles
-      Lf.tileLayer(
-        `https://api.maptiler.com/maps/dataviz-dark/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`,
-        {
-          attribution:'© <a href="https://www.maptiler.com/">MapTiler</a>',
-          tileSize:512, zoomOffset:-1, maxZoom:20,
-        }
-      ).addTo(map);
-
-      const makeIcon = ()=> Lf.divIcon({
-        className:"",
-        html:`<div style="width:18px;height:18px;border-radius:50% 50% 50% 0;
-          background:#2ABFBF;border:2px solid #0D0F14;transform:rotate(-45deg)"></div>`,
-        iconSize:[18,18], iconAnchor:[9,18],
-      });
-
-      const reverseGeocode = async (lat,lng)=>{
-        try{
-          const r=await fetch(
-            `https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${MAPTILER_KEY}`
-          );
-          const d=await r.json();
-          setAddress(d.features?.[0]?.place_name||"");
-        }catch{ setAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`); }
-      };
-
-      map.on("click",(e)=>{
-        const {lat,lng}=e.latlng;
-        setCoords({lat,lng});
-        if(markerRef.current) markerRef.current.remove();
-        markerRef.current=Lf.marker([lat,lng],{icon:makeIcon()}).addTo(map);
-        reverseGeocode(lat,lng);
-      });
-
-      mapObj.current=map;
+    const map = Leaflet.map(mapRef.current, {
+      center: [27.7172, 85.3240], zoom: 13,
     });
 
-    return ()=>{
-      if(mapObj.current){ mapObj.current.remove(); mapObj.current=null; }
-    };
-  },[]);
+    Leaflet.tileLayer(
+      `https://api.maptiler.com/maps/dataviz-dark/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`,
+      { attribution:"© MapTiler", tileSize:512, zoomOffset:-1, maxZoom:20 }
+    ).addTo(map);
 
-  const useMyLocation=()=>{
-    if(!navigator.geolocation){setErr("Geolocation not supported.");return;}
-    navigator.geolocation.getCurrentPosition(async pos=>{
-      const lat=pos.coords.latitude, lng=pos.coords.longitude;
-      setCoords({lat,lng});
-      mapObj.current?.setView([lat,lng],17);
-      import("leaflet").then((L)=>{
-        const Lf=L.default||L;
-        const icon=Lf.divIcon({
-          className:"",
-          html:`<div style="width:18px;height:18px;border-radius:50% 50% 50% 0;
-            background:#2ABFBF;border:2px solid #0D0F14;transform:rotate(-45deg)"></div>`,
-          iconSize:[18,18],iconAnchor:[9,18],
-        });
-        if(markerRef.current) markerRef.current.remove();
-        markerRef.current=Lf.marker([lat,lng],{icon}).addTo(mapObj.current);
+    const makeIcon = () => Leaflet.divIcon({
+      className: "",
+      html: `<div style="width:18px;height:18px;border-radius:50% 50% 50% 0;
+        background:#2ABFBF;border:2px solid #0D0F14;transform:rotate(-45deg)"></div>`,
+      iconSize: [18,18], iconAnchor: [9,18],
+    });
+
+    map.on("click", async (e) => {
+      const { lat, lng } = e.latlng;
+      setCoords({ lat, lng });
+      if (markerRef.current) markerRef.current.remove();
+      markerRef.current = Leaflet.marker([lat, lng], { icon: makeIcon() }).addTo(map);
+      try {
+        const r = await fetch(`https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${MAPTILER_KEY}`);
+        const d = await r.json();
+        setAddress(d.features?.[0]?.place_name || "");
+      } catch { setAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`); }
+    });
+
+    mapObj.current = map;
+
+    return () => {
+      if (mapObj.current) { mapObj.current.remove(); mapObj.current = null; }
+    };
+  }, []);
+
+  const useMyLocation = () => {
+    if (!navigator.geolocation) { setErr("Geolocation not supported."); return; }
+    navigator.geolocation.getCurrentPosition(async pos => {
+      const lat = pos.coords.latitude, lng = pos.coords.longitude;
+      setCoords({ lat, lng });
+      mapObj.current?.setView([lat, lng], 17);
+      const icon = Leaflet.divIcon({
+        className: "",
+        html: `<div style="width:18px;height:18px;border-radius:50% 50% 50% 0;
+          background:#2ABFBF;border:2px solid #0D0F14;transform:rotate(-45deg)"></div>`,
+        iconSize: [18,18], iconAnchor: [9,18],
       });
-      try{
-        const r=await fetch(
-          `https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${MAPTILER_KEY}`
-        );
-        const d=await r.json();
-        setAddress(d.features?.[0]?.place_name||"");
-      }catch{ setAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`); }
-    },()=>setErr("Could not get your location."));
+      if (markerRef.current) markerRef.current.remove();
+      markerRef.current = Leaflet.marker([lat, lng], { icon }).addTo(mapObj.current);
+      try {
+        const r = await fetch(`https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${MAPTILER_KEY}`);
+        const d = await r.json();
+        setAddress(d.features?.[0]?.place_name || "");
+      } catch { setAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`); }
+    }, () => setErr("Could not get your location."));
   };
 
   const handleNext=async()=>{

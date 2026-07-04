@@ -5,22 +5,16 @@ import { auth } from "./firebase";
 import KothaFindAuth from "./KothaFindAuth";
 import RenterApp from "./RenterApp";
 
-const DJANGO_BASE =
-  import.meta.env.VITE_DJANGO_BASE || "http://127.0.0.1:8000/api";
+const DJANGO_BASE = import.meta.env.VITE_DJANGO_BASE || "http://127.0.0.1:8000/api/listings";
 
+// For users endpoint — different base
 async function fetchRole(firebaseUser) {
   const token = await firebaseUser.getIdToken();
-
-  const res = await fetch(`${DJANGO_BASE}/users/me/`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+  const usersBase = import.meta.env.VITE_DJANGO_USERS || "http://127.0.0.1:8000/api/users";
+  const res = await fetch(`${usersBase}/me/`, {
+    headers: { Authorization: `Bearer ${token}` },
   });
-
-  if (!res.ok) {
-    throw new Error("Failed to fetch profile.");
-  }
-
+  if (!res.ok) throw new Error("failed");
   const data = await res.json();
   return data.role;
 }
