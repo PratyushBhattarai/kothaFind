@@ -5,10 +5,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useRef, useEffect } from "react";
 import { auth } from "./firebase";
-import * as maptilersdk from "@maptiler/sdk";
 
-const BASE = import.meta.env.VITE_DJANGO_BASE;L
-const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY;
+const BASE = import.meta.env.VITE_DJANGO_BASE
+const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY
 
 async function apiPost(path, body) {
   const token = await auth.currentUser.getIdToken();
@@ -157,12 +156,12 @@ function StepBar({current}) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STEP 1 — Location (Google Maps)
+// STEP 1 — Location (MapTiler + Leaflet)
 // ─────────────────────────────────────────────────────────────────────────────
 function StepLocation({onNext}) {
-  const mapRef     = useRef(null);
-  const markerRef  = useRef(null);
-  const mapObjRef  = useRef(null);
+  const mapRef    = useRef(null);
+  const mapObj    = useRef(null);
+  const markerRef = useRef(null);
   const [coords,   setCoords]   = useState(null);
   const [address,  setAddress]  = useState("");
   const [ward,     setWard]     = useState("");
@@ -170,68 +169,93 @@ function StepLocation({onNext}) {
   const [district, setDistrict] = useState("Kathmandu");
   const [loading,  setLoading]  = useState(false);
   const [err,      setErr]      = useState("");
-  const [mapLoaded,setMapLoaded]= useState(false);
 
-  // load Google Maps script
+  // ── Init MapTiler + Leaflet ─────────────────────────────────────────────────
   useEffect(()=>{
-    if(window.google){setMapLoaded(true);return;}
-    const s=document.createElement("script");
-    s.src=`https://maps.googleapis.com/maps/api/js?key=${MAPS_KEY}&libraries=places`;
-    s.async=true;
-    s.onload=()=>setMapLoaded(true);
-    document.head.appendChild(s);
+    if(mapObj.current) return;
+
+    // inject Leaflet CSS once
+    if(!document.getElementById("leaflet-css")){
+      const link=document.createElement("link");
+      link.id="leaflet-css";
+      link.rel="stylesheet";
+      link.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(link);
+    }
+
+    import("leaflet").then((L)=>{
+      const Lf = L.default||L;
+
+      const map = Lf.map(mapRef.current,{
+        center:[27.7172,85.3240], zoom:13,
+      });
+
+      // MapTiler dark tiles
+      Lf.tileLayer(
+        `https://api.maptiler.com/maps/dataviz-dark/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`,
+        {
+          attribution:'© <a href="https://www.maptiler.com/">MapTiler</a>',
+          tileSize:512, zoomOffset:-1, maxZoom:20,
+        }
+      ).addTo(map);
+
+      const makeIcon = ()=> Lf.divIcon({
+        className:"",
+        html:`<div style="width:18px;height:18px;border-radius:50% 50% 50% 0;
+          background:#2ABFBF;border:2px solid #0D0F14;transform:rotate(-45deg)"></div>`,
+        iconSize:[18,18], iconAnchor:[9,18],
+      });
+
+      const reverseGeocode = async (lat,lng)=>{
+        try{
+          const r=await fetch(
+            `https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${MAPTILER_KEY}`
+          );
+          const d=await r.json();
+          setAddress(d.features?.[0]?.place_name||"");
+        }catch{ setAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`); }
+      };
+
+      map.on("click",(e)=>{
+        const {lat,lng}=e.latlng;
+        setCoords({lat,lng});
+        if(markerRef.current) markerRef.current.remove();
+        markerRef.current=Lf.marker([lat,lng],{icon:makeIcon()}).addTo(map);
+        reverseGeocode(lat,lng);
+      });
+
+      mapObj.current=map;
+    });
+
+    return ()=>{
+      if(mapObj.current){ mapObj.current.remove(); mapObj.current=null; }
+    };
   },[]);
-
-  // init map once script is loaded
-  useEffect(()=>{
-    if(!mapLoaded||!mapRef.current||mapObjRef.current) return;
-    const center={lat:27.7172,lng:85.3240}; // Kathmandu
-    const map=new window.google.maps.Map(mapRef.current,{
-      center, zoom:13,
-      styles:[
-        {elementType:"geometry",stylers:[{color:"#1a1e2a"}]},
-        {elementType:"labels.text.fill",stylers:[{color:"#9A9590"}]},
-        {elementType:"labels.text.stroke",stylers:[{color:"#0D0F14"}]},
-        {featureType:"road",elementType:"geometry",stylers:[{color:"#2d3345"}]},
-        {featureType:"water",elementType:"geometry",stylers:[{color:"#0D0F14"}]},
-        {featureType:"poi",stylers:[{visibility:"off"}]},
-      ],
-    });
-    mapObjRef.current=map;
-    map.addListener("click",(e)=>{
-      const lat=e.latLng.lat(), lng=e.latLng.lng();
-      setCoords({lat,lng});
-      if(markerRef.current) markerRef.current.setMap(null);
-      markerRef.current=new window.google.maps.Marker({
-        position:{lat,lng}, map,
-        icon:{path:window.google.maps.SymbolPath.CIRCLE,scale:10,
-          fillColor:C.teal,fillOpacity:1,strokeColor:"#0D0F14",strokeWeight:2},
-      });
-      // reverse geocode
-      const gc=new window.google.maps.Geocoder();
-      gc.geocode({location:{lat,lng}},(res,status)=>{
-        if(status==="OK"&&res[0]) setAddress(res[0].formatted_address);
-      });
-    });
-  },[mapLoaded]);
 
   const useMyLocation=()=>{
     if(!navigator.geolocation){setErr("Geolocation not supported.");return;}
-    navigator.geolocation.getCurrentPosition(pos=>{
+    navigator.geolocation.getCurrentPosition(async pos=>{
       const lat=pos.coords.latitude, lng=pos.coords.longitude;
       setCoords({lat,lng});
-      mapObjRef.current?.panTo({lat,lng});
-      mapObjRef.current?.setZoom(16);
-      if(markerRef.current) markerRef.current?.setMap(null);
-      markerRef.current=new window.google.maps.Marker({
-        position:{lat,lng}, map:mapObjRef.current,
-        icon:{path:window.google.maps.SymbolPath.CIRCLE,scale:10,
-          fillColor:C.teal,fillOpacity:1,strokeColor:"#0D0F14",strokeWeight:2},
+      mapObj.current?.setView([lat,lng],17);
+      import("leaflet").then((L)=>{
+        const Lf=L.default||L;
+        const icon=Lf.divIcon({
+          className:"",
+          html:`<div style="width:18px;height:18px;border-radius:50% 50% 50% 0;
+            background:#2ABFBF;border:2px solid #0D0F14;transform:rotate(-45deg)"></div>`,
+          iconSize:[18,18],iconAnchor:[9,18],
+        });
+        if(markerRef.current) markerRef.current.remove();
+        markerRef.current=Lf.marker([lat,lng],{icon}).addTo(mapObj.current);
       });
-      const gc=new window.google.maps.Geocoder();
-      gc.geocode({location:{lat,lng}},(res,status)=>{
-        if(status==="OK"&&res[0]) setAddress(res[0].formatted_address);
-      });
+      try{
+        const r=await fetch(
+          `https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${MAPTILER_KEY}`
+        );
+        const d=await r.json();
+        setAddress(d.features?.[0]?.place_name||"");
+      }catch{ setAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`); }
     },()=>setErr("Could not get your location."));
   };
 
@@ -239,13 +263,13 @@ function StepLocation({onNext}) {
     if(!coords){setErr("Please pin your property location on the map.");return;}
     if(!ward.trim()){setErr("Please enter your ward number.");return;}
     setErr(""); setLoading(true);
-    try {
+    try{
       await apiPost("/renter/location/",{
         latitude:coords.lat, longitude:coords.lng,
         address, ward, tole, district,
       });
       onNext({coords,address,ward,tole,district});
-    } catch(e){ setErr("Failed to save location. Please try again."); }
+    }catch{ setErr("Failed to save location. Please try again."); }
     finally{ setLoading(false); }
   };
 
@@ -254,26 +278,21 @@ function StepLocation({onNext}) {
       <h2 style={{fontFamily:"'Sora',sans-serif",fontSize:20,fontWeight:700,color:C.txt,marginBottom:4}}>
         Pin your property location
       </h2>
-      <p style={{fontSize:13,color:C.txt2,marginBottom:20}}>
-        Click on the map to mark your exact property location, or use your current location.
+      <p style={{fontSize:13,color:C.txt2,marginBottom:16}}>
+        Click the map to mark your exact property location, or use your current location.
       </p>
 
       {/* Map */}
-      <div style={{borderRadius:12,overflow:"hidden",border:`0.5px solid ${C.bdr2}`,marginBottom:14,position:"relative"}}>
-        <div ref={mapRef} style={{width:"100%",height:300,background:C.card}}/>
-        {!mapLoaded&&(
-          <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",
-            justifyContent:"center",background:C.card,color:C.txt2,fontSize:13}}>
-            Loading map…
-          </div>
-        )}
+      <div style={{borderRadius:12,overflow:"hidden",border:`0.5px solid ${C.bdr2}`,
+        marginBottom:12,height:300}}>
+        <div ref={mapRef} style={{width:"100%",height:"100%",background:C.card}}/>
       </div>
 
       <button type="button" onClick={useMyLocation}
         style={{width:"100%",padding:"9px 0",marginBottom:14,background:C.goldDim,
           border:`0.5px solid rgba(245,166,35,0.3)`,borderRadius:9,color:C.gold,
-          fontSize:13,cursor:"pointer",fontFamily:"Inter,sans-serif",display:"flex",
-          alignItems:"center",justifyContent:"center",gap:8}}>
+          fontSize:13,cursor:"pointer",fontFamily:"Inter,sans-serif",
+          display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
         📍 Use my current location
       </button>
 
@@ -281,13 +300,15 @@ function StepLocation({onNext}) {
         <div style={{background:C.card,border:`0.5px solid ${C.tealBdr}`,borderRadius:9,
           padding:"10px 14px",marginBottom:14,fontSize:12,color:C.teal}}>
           ✓ Pinned: {coords.lat.toFixed(6)}, {coords.lng.toFixed(6)}
-          {address&&<div style={{color:C.txt2,marginTop:3}}>{address}</div>}
+          {address&&<div style={{color:C.txt2,marginTop:3,fontSize:11}}>{address}</div>}
         </div>
       )}
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <TextInput label="Ward No." placeholder="e.g. 12" value={ward} onChange={e=>setWard(e.target.value)}/>
-        <TextInput label="Tole / Colony" placeholder="e.g. New Baneshwor" value={tole} onChange={e=>setTole(e.target.value)}/>
+        <TextInput label="Ward No. *" placeholder="e.g. 12"
+          value={ward} onChange={e=>setWard(e.target.value)}/>
+        <TextInput label="Tole / Colony" placeholder="e.g. New Baneshwor"
+          value={tole} onChange={e=>setTole(e.target.value)}/>
       </div>
       <Select label="District" value={district} onChange={e=>setDistrict(e.target.value)}>
         <option>Kathmandu</option>
