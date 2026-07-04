@@ -10,24 +10,31 @@ const BASE = import.meta.env.VITE_DJANGO_BASE
 const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY
 
 async function apiPost(path, body) {
-  const token = await auth.currentUser.getIdToken();
+  const user = auth.currentUser;
+  console.log("Current user:", user?.email); // ← add this
+  
+  if (!user) {
+    throw new Error("Not logged in");
+  }
+  
+  const token = await user.getIdToken();
+  console.log("Token (first 20 chars):", token.substring(0, 20)); // ← add this
+  
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    headers: { 
+      Authorization: `Bearer ${token}`, 
+      "Content-Type": "application/json" 
+    },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-async function apiPostForm(path, formData) {
-  const token = await auth.currentUser.getIdToken();
-  const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: formData,
-  });
-  if (!res.ok) throw new Error(await res.text());
+  
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.log("API error:", res.status, errorText); // ← add this
+    throw new Error(errorText);
+  }
+  
   return res.json();
 }
 
