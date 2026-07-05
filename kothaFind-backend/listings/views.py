@@ -13,9 +13,20 @@ from .serializers import (
 )
 
 
+# ── Base view that handles CORS preflight OPTIONS ─────────────────────────────
+class CORSAPIView(APIView):
+    def options(self, request, *args, **kwargs):
+        response = Response(status=status.HTTP_200_OK)
+        response["Access-Control-Allow-Origin"]  = "*"
+        response["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Authorization, Content-Type, Accept, Origin, X-Requested-With"
+        response["Access-Control-Max-Age"]       = "86400"
+        return response
+
+
 # ── Onboarding steps ──────────────────────────────────────────────────────────
 
-class RenterLocationView(APIView):
+class RenterLocationView(CORSAPIView):
     """Step 1 — save or update renter's property location."""
     permission_classes = [IsAuthenticated]
 
@@ -31,7 +42,7 @@ class RenterLocationView(APIView):
         return Response(RenterProfileSerializer(profile).data, status=status.HTTP_200_OK)
 
 
-class RenterContactView(APIView):
+class RenterContactView(CORSAPIView):
     """Step 2 — save contact info."""
     permission_classes = [IsAuthenticated]
 
@@ -45,7 +56,7 @@ class RenterContactView(APIView):
         return Response(RenterProfileSerializer(profile).data)
 
 
-class RenterPropertyView(APIView):
+class RenterPropertyView(CORSAPIView):
     """Step 3 — create or update the property/building."""
     permission_classes = [IsAuthenticated]
 
@@ -67,18 +78,20 @@ class RenterPropertyView(APIView):
         return Response(PropertySerializer(props, many=True).data)
 
 
-class AcceptTermsView(APIView):
+class AcceptTermsView(CORSAPIView):
     """Step 5 — record that renter agreed to T&C."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         if not request.data.get("agreed"):
-            return Response({"error": "You must agree to terms."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "You must agree to terms."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         profile, _ = RenterProfile.objects.get_or_create(user=request.user)
         profile.terms_agreed    = True
         profile.terms_agreed_at = timezone.now()
         profile.save()
-        # mark user as onboarded
         request.user.is_verified = True
         request.user.save()
         return Response({"status": "accepted"})
@@ -86,7 +99,7 @@ class AcceptTermsView(APIView):
 
 # ── Rooms CRUD ────────────────────────────────────────────────────────────────
 
-class RoomListCreateView(APIView):
+class RoomListCreateView(CORSAPIView):
     """Step 4 — add rooms + media. Also GET all rooms for dashboard."""
     permission_classes = [IsAuthenticated]
     parser_classes     = [MultiPartParser, FormParser, JSONParser]
@@ -103,13 +116,16 @@ class RoomListCreateView(APIView):
         prop_id  = request.data.get("property")
         features = request.data.get("features", "[]")
         if isinstance(features, str):
-            try: features = json.loads(features)
+            try:    features = json.loads(features)
             except: features = []
 
         try:
             prop = Property.objects.get(id=prop_id, owner=request.user)
         except Property.DoesNotExist:
-            return Response({"error": "Property not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Property not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
         room = Room.objects.create(
             property        = prop,
@@ -122,7 +138,6 @@ class RoomListCreateView(APIView):
             features        = features,
         )
 
-        # save uploaded files
         for f in request.FILES.getlist("media"):
             media_type = "video" if f.content_type.startswith("video") else "image"
             RoomMedia.objects.create(room=room, file=f, media_type=media_type)
@@ -133,19 +148,19 @@ class RoomListCreateView(APIView):
         )
 
 
-class RoomDetailView(APIView):
-    """PATCH to update status (available/rented/hidden). GET to track view count."""
+class RoomDetailView(CORSAPIView):
+    """PATCH to update status. GET for single room."""
     permission_classes = [IsAuthenticated]
 
     def get_room(self, pk, user):
-        try: return Room.objects.get(pk=pk, property__owner=user)
-        except Room.DoesNotExist: return None
+        try:    return Room.objects.get(pk=pk, property__owner=user)
+        except: return None
 
     def patch(self, request, pk):
         room = self.get_room(pk, request.user)
         if not room:
             return Response({"error": "Not found."}, status=status.HTTP_404_NOT_FOUND)
-        allowed = ["status","title","price_per_month","description","features"]
+        allowed = ["status", "title", "price_per_month", "description", "features"]
         for field in allowed:
             if field in request.data:
                 setattr(room, field, request.data[field])
@@ -155,7 +170,7 @@ class RoomDetailView(APIView):
 
 # ── Public room detail (view counter) ─────────────────────────────────────────
 
-class PublicRoomDetailView(APIView):
+class PublicRoomDetailView(CORSAPIView):
     """Public endpoint — increments view count once per session."""
     permission_classes = [AllowAny]
 
@@ -165,7 +180,6 @@ class PublicRoomDetailView(APIView):
         except Room.DoesNotExist:
             return Response({"error": "Not found."}, status=404)
 
-        # track view
         session_key = request.session.session_key or ""
         if not session_key:
             request.session.create()
@@ -182,9 +196,34 @@ class PublicRoomDetailView(APIView):
         return Response(RoomSerializer(room, context={"request": request}).data)
 
 
+# ── Public rooms list (rentee browsing) ───────────────────────────────────────
+
+class PublicRoomsListView(CORSAPIView):
+    """Public endpoint — list all available rooms with optional filters."""
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        rooms = Room.objects.filter(
+            status="available"
+        ).prefetch_related("media", "property")
+
+        district  = request.query_params.get("district")
+        room_type = request.query_params.get("room_type")
+        max_price = request.query_params.get("max_price")
+
+        if district:  rooms = rooms.filter(property__district=district)
+        if room_type: rooms = rooms.filter(room_type=room_type)
+        if max_price: rooms = rooms.filter(price_per_month__lte=max_price)
+
+        rooms = rooms.order_by("-created_at")
+        return Response(
+            RoomSerializer(rooms, many=True, context={"request": request}).data
+        )
+
+
 # ── Dashboard stats ───────────────────────────────────────────────────────────
 
-class RenterStatsView(APIView):
+class RenterStatsView(CORSAPIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -199,7 +238,7 @@ class RenterStatsView(APIView):
 
 # ── Inquiries ─────────────────────────────────────────────────────────────────
 
-class InquiryCreateView(APIView):
+class InquiryCreateView(CORSAPIView):
     """Public endpoint — tenant sends inquiry about a room."""
     permission_classes = [AllowAny]
 
@@ -210,7 +249,7 @@ class InquiryCreateView(APIView):
         return Response(s.data, status=status.HTTP_201_CREATED)
 
 
-class RenterInquiriesView(APIView):
+class RenterInquiriesView(CORSAPIView):
     """Renter views inquiries for their rooms."""
     permission_classes = [IsAuthenticated]
 
