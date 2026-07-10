@@ -86,6 +86,8 @@ else:
 CORS_ALLOW_ALL_ORIGINS  = True
 CORS_ALLOW_CREDENTIALS  = True
 CORS_URLS_REGEX         = r"^.*$"
+CORS_ALLOWED_ORIGINS = [
+    "https://kotha-find.vercel.app",
 
 CORS_ALLOW_HEADERS = [
     "accept",

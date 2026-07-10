@@ -1,6 +1,6 @@
 import { auth } from "./firebase";
 
-const BASE = "kothafind-production.up.railway.app";  // replace with your Railway URL
+const BASE = import.meta.env.VITE_DJANGO_BASE;  // replace with your Railway URL
 
 // get fresh token from any Firebase user object
 async function authHeaders(firebaseUser) {
